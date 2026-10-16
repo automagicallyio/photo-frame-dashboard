@@ -1,0 +1,16 @@
+{
+  "name": "homehq/synology",
+  "type": "project",
+  "require": {
+    "php": ">=8.3",
+    "ext-curl": "*",
+    "ext-gd": "*",
+    "ext-pdo": "*",
+    "ext-pdo_sqlite": "*",
+    "sabre/vobject": "^4.5"
+  },
+  "config": {
+    "platform": { "php": "8.3.0" },
+    "sort-packages": true
+  }
+}

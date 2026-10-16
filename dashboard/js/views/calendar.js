@@ -197,11 +197,15 @@
       '<button class="icon-btn" data-nav="1" aria-label="Next">' + App.icon('right', 24) + '</button>' +
       '<button class="btn btn--ghost' + (isToday ? ' is-hidden' : '') + '" data-today>Today</button>' +
       '<div class="seg">' + MODES.map(function (m) { return '<button class="' + (V.mode === m[0] ? 'is-on' : '') + '" data-mode="' + m[0] + '">' + m[1] + '</button>'; }).join('') + '</div>' +
-      '<button class="fab" data-add aria-label="Add event">' + App.icon('plus', 26) + '</button>' +
+      (D.live ? '<span class="label">Read-only</span>' : '<button class="fab" data-add aria-label="Add event">' + App.icon('plus', 26) + '</button>') +
       '</header>';
   }
 
   function render() {
+    if (D.live && !D.calendar) {
+      V.el.innerHTML = '<div class="cal"><h1 class="serif">Calendar unavailable</h1><p>Check the setup or connection notice below.</p></div>';
+      return;
+    }
     var body = { day: dayView, '3day': threeDay, week: weekView, month: monthView }[V.mode]();
     V.el.innerHTML = '<div class="cal cal--' + V.mode + '">' + header() + '<div class="cal-body">' + body + '</div></div>';
     var sc = V.el.querySelector('.grid-scroll');
@@ -213,8 +217,18 @@
   }
 
   function nav(dir) {
-    if (V.mode === 'month') V.date = new Date(V.date.getFullYear(), V.date.getMonth() + dir, 1);
-    else V.date = App.addDays(V.date, dir * ({ day: 1, '3day': 3, week: 7 }[V.mode]));
+    var next = V.mode === 'month' ? new Date(V.date.getFullYear(), V.date.getMonth() + dir, 1)
+      : App.addDays(V.date, dir * ({ day: 1, '3day': 3, week: 7 }[V.mode]));
+    if (D.live) {
+      var start = new Date(D.calendar.from + 'T00:00:00'), end = new Date(D.calendar.until + 'T00:00:00');
+      var displayStart = V.mode === 'month' ? App.addDays(next, -((next.getDay() + 6) % 7)) : next;
+      var displayEnd = App.addDays(displayStart, { day: 1, '3day': 3, week: 7, month: 42 }[V.mode]);
+      if (displayStart < start || displayEnd > end) {
+        App.toast('Calendar is loaded from ' + D.calendar.from + ' to ' + D.calendar.until + '. Choose a closer date.', { ms: 6000 });
+        return;
+      }
+    }
+    V.date = next;
     V.scroll = null;
     render();
   }
@@ -237,7 +251,7 @@
       return render();
     }
     if ((t = e.target.closest('[data-day]'))) { V.mode = 'day'; V.date = new Date(+t.dataset.day); V.scroll = null; return render(); }
-    if ((t = e.target.closest('[data-add]'))) return addSheet();
+    if (!D.live && (t = e.target.closest('[data-add]'))) return addSheet();
   }
 
   // Swipe left/right to change day (the only swipe gesture in the app)
@@ -263,9 +277,9 @@
       '<div class="evs-time num">' + (e.allDay ? 'All day' : App.fmt.range(e.start, e.end)) + '</div></div>' +
       '<div class="evs-body">' +
       (e.travel ? '<div class="evs-row evs-leave">' + App.icon('car', 28) + '<div><b>Leave by ' + App.fmt.time(App.leaveBy(e)) + '</b><span>' + e.travel + ' min drive in current traffic</span></div></div>' : '') +
-      (e.loc ? '<div class="evs-row">' + App.icon('pin', 28) + '<div><b>' + App.esc(e.loc) + '</b><span>Tap to send directions to phone</span></div></div>' : '') +
+      (e.loc ? '<div class="evs-row">' + App.icon('pin', 28) + '<div><b>' + App.esc(e.loc) + '</b><span>' + (D.live ? 'Location' : 'Tap to send directions to phone') + '</span></div></div>' : '') +
       '<div class="evs-row">' + App.icon('person', 28) + '<div class="evs-people">' + (fam ? D.people : e.people.map(App.person)).map(function (x) {
-        return '<span class="chip" style="' + App.pstyle(x) + '">' + App.avatar(x, 32) + x.name + '</span>';
+        return '<span class="chip" style="' + App.pstyle(x) + '">' + App.avatar(x, 32) + App.esc(x.name) + '</span>';
       }).join('') + '</div></div>' +
       (e.notes ? '<div class="evs-notes serif">“' + App.esc(e.notes) + '”</div>' : '') +
       '</div></div>', { cls: 'sheet--event' });
