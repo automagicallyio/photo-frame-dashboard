@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "package:synology": "composer --working-dir=synology install --no-dev --prefer-dist --no-interaction && vite build && node synology/package.mjs",
+    "test:synology": "php synology/test.php && node --test synology/live.test.mjs",
+    "test:synology:http": "php synology/smoke.php"
   },
   "devDependencies": {
     "vite": "^8.3.1",

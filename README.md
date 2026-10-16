@@ -71,6 +71,10 @@ built without Gradle, that shows it. Hold two fingers still for 1.5 s to open a 
 launcher, Android settings, and reloading. On frames without system navigation, optional floating
 **Back** and **Dashboard** buttons help; see the [kiosk guide](dashboard/kiosk/README.md).
 
+For an opt-in live version on a trusted home LAN, see the [Synology Web Station guide](dashboard/synology/README.md):
+read-only Google calendars, locally synced OneDrive photos, weather, and saved chores/shopping.
+Private configuration lives outside the website's document root; the hosted demo stays unchanged.
+
 ## For agents: start here
 
 You are probably helping someone with a similar device plugged into a Mac over USB. Read this

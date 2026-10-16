@@ -25,10 +25,10 @@
           }).join('') + '</div></div>' +
           '<div class="ph-bottom">' +
           '  <button class="ph-btn" data-prev>' + App.icon('left', 30) + '</button>' +
-          '  <button class="ph-btn ph-btn--fav" data-fav>' + App.icon('heart', 30) + '<span>Favourite</span></button>' +
+          (window.DATA.live ? '' : '  <button class="ph-btn ph-btn--fav" data-fav>' + App.icon('heart', 30) + '<span>Favourite</span></button>') +
           '  <button class="ph-btn" data-next>' + App.icon('right', 30) + '</button>' +
           '</div></div>';
-        V.show = new App.Slideshow(el.querySelector('.ph-stage'), { layout: V.layout, interval: 15000, onChange: function () { setTimeout(heart); } });
+        V.show = new App.Slideshow(el.querySelector('.ph-stage'), { layout: V.layout, interval: 15000, onChange: function () { if (!window.DATA.live) setTimeout(heart); } });
         el.addEventListener('click', function (e) {
           var t = e.target.closest('button');
           if (!t) return;

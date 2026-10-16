@@ -1,0 +1,12 @@
+{
+  "allowed_hosts": ["synology:8088", "localhost:8088", "127.0.0.1:8088"],
+  "timezone": "America/Toronto",
+  "weather": { "name": "Oakville, Ontario", "latitude": 43.45, "longitude": -79.68 },
+  "photo_directory": "/volume1/dashboard-photos",
+  "people": [
+    { "id": "household", "name": "Household", "color": "#2D5BFF" }
+  ],
+  "calendars": [
+    { "name": "Family calendar", "url": "", "people": ["household"] }
+  ]
+}
