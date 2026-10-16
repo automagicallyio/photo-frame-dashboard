@@ -96,11 +96,28 @@ try {
     verify($data['albumStatus']['shown'] === 1 && $data['albumStatus']['updated'] > time() - 60, 'Index status missing.');
     $indexFile = $root . '/private/photo-index.json';
     $index = json_decode(file_get_contents($indexFile), true, 512, JSON_THROW_ON_ERROR);
-    $index['updated'] = time() - 7201;
+    $index['updated'] = time() - 25 * 3600;
+    file_put_contents($indexFile, json_encode($index, JSON_THROW_ON_ERROR));
+    $daily = json_decode(request($url . '/api.php', $headers)[1], true, 64, JSON_THROW_ON_ERROR);
+    verify(count($daily['photos']) === 1 && count($daily['errors']) === 1,
+        'Daily indexing must allow more than a day between successful scans without a warning.');
+    $index['updated'] = time() - 49 * 3600;
     file_put_contents($indexFile, json_encode($index, JSON_THROW_ON_ERROR));
     $stale = json_decode(request($url . '/api.php', $headers)[1], true, 64, JSON_THROW_ON_ERROR);
     verify(count($stale['photos']) === 1 && str_contains(implode(' ', $stale['errors']), 'older photo index'),
         'Stale index must keep serving photos and warn about the scheduler.');
+    $c['photo_index_interval_hours'] = 168;
+    file_put_contents($root . '/private/config.json', json_encode($c, JSON_THROW_ON_ERROR));
+    $index['updated'] = time() - 8 * 24 * 3600;
+    file_put_contents($indexFile, json_encode($index, JSON_THROW_ON_ERROR));
+    $weekly = json_decode(request($url . '/api.php', $headers)[1], true, 64, JSON_THROW_ON_ERROR);
+    verify(count($weekly['photos']) === 1 && count($weekly['errors']) === 1,
+        'Weekly indexing must allow more than a week between successful scans without a warning.');
+    $index['updated'] = time() - 15 * 24 * 3600;
+    file_put_contents($indexFile, json_encode($index, JSON_THROW_ON_ERROR));
+    $weeklyStale = json_decode(request($url . '/api.php', $headers)[1], true, 64, JSON_THROW_ON_ERROR);
+    verify(count($weeklyStale['photos']) === 1 && str_contains(implode(' ', $weeklyStale['errors']), 'older photo index'),
+        'Weekly indexing must warn after two intervals while preserving photos.');
     [$status, $jpeg, $type] = request($url . '/' . $data['photos'][0]['url']);
     verify($status === 200 && $type === 'image/jpeg', 'Thumbnail endpoint failed.');
     verify(str_starts_with($jpeg, "\xff\xd8"), 'Thumbnail body is not JPEG: ' . substr($jpeg, 0, 300) . "\n" . file_get_contents($root . '/server.log'));

@@ -3,6 +3,7 @@
   "timezone": "America/Toronto",
   "weather": { "name": "Oakville, Ontario", "latitude": 43.45, "longitude": -79.68 },
   "photo_directory": "/volume1/dashboard-photos",
+  "photo_index_interval_hours": 24,
   "people": [
     { "id": "household", "name": "Household", "color": "#2D5BFF" }
   ],

@@ -95,8 +95,14 @@ images are not converted; export resized JPEG copies into the dedicated album if
 Album scanning runs in a **scheduled CLI task**, never in a web request. Until its first run
 finishes the dashboard shows an explicit "Photo index not ready" notice; calendar, weather and
 lists still work. Later scans replace the index atomically, so the frame keeps showing the
-previous sample while a scan runs. A failed scan preserves that sample; an index older than
-two hours produces a warning on the dashboard.
+previous sample while a scan runs. A failed scan preserves that sample.
+
+Set `photo_index_interval_hours` in the NAS's `private/config.json` to the expected scan interval:
+`24` for daily (the default when omitted), or `168` for weekly. It must be a positive whole number.
+The dashboard warns after two intervals without a successful scan: 48 hours for daily, or
+14 days for weekly. This measures time since the last successful scan, not the age of the photos.
+Indexing only discovers added/removed files and draws a fresh sample; older photos remain usable
+between scans. This setting does **not** schedule scans: set the matching schedule in DSM below.
 
 In DSM **Control Panel → Task Scheduler**, create a scheduled **User-defined script** task:
 
@@ -104,7 +110,9 @@ In DSM **Control Panel → Task Scheduler**, create a scheduled **User-defined s
    access to `private`. Web Station also needs read access to the album to make thumbnails.
    Do not run as root or grant broad access to `homes`. Ensure both accounts can read/write
    files created in `private` by the other; use narrow inherited DSM ACLs.
-2. Schedule every 30 minutes. Enable task output/error notifications so failures are visible.
+2. Schedule once a day (for example at 03:00) for `photo_index_interval_hours: 24`, or once a week
+   for `168`. Change existing tasks in DSM too; updating the dashboard does not change the NAS
+   task. Enable task output/error notifications so failures are visible.
 3. Run the installed PHP 8.3+ CLI binary with the indexing script, for example:
 
    ```sh

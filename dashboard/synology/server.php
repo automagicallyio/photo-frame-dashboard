@@ -23,6 +23,10 @@ function config(string $root): array
     if (!is_array($c) || empty($c['allowed_hosts']) || empty($c['people']) || count($c['people']) > 5) {
         throw new Problem('Configuration requires allowed_hosts and one to five people.');
     }
+    $c += ['photo_index_interval_hours' => 24];
+    if (!is_int($c['photo_index_interval_hours']) || $c['photo_index_interval_hours'] < 1) {
+        throw new Problem('photo_index_interval_hours must be a positive whole number in private/config.json.');
+    }
     new \DateTimeZone($c['timezone'] ?? '');
     $ids = [];
     foreach ($c['people'] as $person) {
@@ -548,7 +552,7 @@ function dashboard(string $root, array $c): array
         if (!$out['photos']) {
             $out['errors'][] = 'Album: no supported photos found.';
         }
-        if ($album['updated'] < time() - 7200) {
+        if ($album['updated'] < time() - $c['photo_index_interval_hours'] * 2 * 3600) {
             $out['errors'][] = 'Album: using an older photo index. Check the NAS scheduled task and its output.';
         }
         $out['albumStatus'] = ['shown' => count($out['photos']), 'supported' => $album['total'] ?? count($out['photos']),

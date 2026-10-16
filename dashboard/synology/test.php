@@ -29,6 +29,19 @@ try {
     $c = json_decode(file_get_contents(__DIR__ . '/config.example.json'), true, 32, JSON_THROW_ON_ERROR);
     file_put_contents($root . '/private/config.json', json_encode($c));
     check(HomeHQ\config($root)['timezone'] === 'America/Toronto', 'Configuration failed.');
+    $legacy = $c;
+    unset($legacy['photo_index_interval_hours']);
+    file_put_contents($root . '/private/config.json', json_encode($legacy));
+    check(HomeHQ\config($root)['photo_index_interval_hours'] === 24, 'Missing indexing interval must default to daily.');
+    foreach ([24, 168] as $interval) {
+        file_put_contents($root . '/private/config.json', json_encode(array_replace($c, ['photo_index_interval_hours' => $interval])));
+        check(HomeHQ\config($root)['photo_index_interval_hours'] === $interval, 'Configured indexing interval was lost.');
+    }
+    foreach ([0, -1, 1.5, '24', null, true] as $interval) {
+        file_put_contents($root . '/private/config.json', json_encode(array_replace($c, ['photo_index_interval_hours' => $interval])));
+        refuses(fn() => HomeHQ\config($root), 503);
+    }
+    file_put_contents($root . '/private/config.json', json_encode($c));
     $_SERVER = ['HTTP_HOST' => 'localhost:8088', 'HTTP_X_HOMEHQ' => '1'];
     HomeHQ\guard($c, true);
     $_SERVER['HTTP_ORIGIN'] = 'https://attacker.example';
