@@ -44,7 +44,9 @@ tested on the frame.
 **HTML/CSS (observed working in the sample dashboard, or Chrome ≤ 106):**
 - Flexbox, CSS Grid, `gap`, `aspect-ratio`, custom properties (`var()`), `clamp()/min()/max()`,
   `:is()`/`:where()`, `@media`, `@font-face`, `@supports`, CSS transitions and simple keyframe
-  animations of `transform`/`opacity`.
+  animations of `transform`/`opacity` that run once and stop. On one PF1007L the kiosk was idle
+  again after a one-second animation had finished (1 tick in the next 4.4 s). A loop that never
+  ends is in **Heavy content**.
 - Colours in `#rgb`, `#rrggbb`, `rgb()/rgba()`, `hsl()`.
 - Self-hosted fonts (`woff2`) and SVG icons.
 
@@ -66,9 +68,21 @@ build: { target: 'chrome106', cssTarget: 'chrome61' }
 `cssTarget: 'chrome61'` stops the minifier from producing 4- and 8-digit hex colours. The frame
 rejected those (observed), even though Chrome 106 should support them.
 
+The same applies to a minifier you do not configure yourself, for example Tailwind v4 through
+Next.js: set `"browserslist": ["chrome >= 61"]` in `package.json`. This was seen on **one** DP101
+(Android 10, WebView 113), where it removed all 91 hex colours with alpha from a built stylesheet.
+That unit also gave `filter: none` for `var(--tw-blur,)`, a variable with an empty fallback that
+Tailwind registers with `@property`, so `blur-*` did nothing there; a literal `filter: blur(12px)`
+worked. Gradients using `color-mix()` did render there, so the `oklch()`/`color-mix()` row below
+doesn't hold on that WebView. Whether `blur-*` works after the `browserslist` change was not tested. Other WebView 113
+devices were not tested either. Test results:
+[veswwe-dp101.md](veswwe-dp101.md#css-compatibility-issues-in-this-webview).
+
 ## Avoid
 
 **CSS that does not work:**
+
+This table is about WebView 106 (the PF1007L). For the one WebView 113 unit tested, see above.
 
 | Feature | Status |
 | --- | --- |
@@ -76,7 +90,7 @@ rejected those (observed), even though Chrome 106 should support them.
 | **Tailwind CSS v4** | Uses the above for its palette. Use **Tailwind v3**, or plain CSS |
 | CSS nesting (`.a { .b {} }` without a preprocessor) | Not supported (observed). Sass/PostCSS nesting compiled away is fine |
 | `:has()` | Did not work on these units (observed), although Chrome 105+ supports it. Test before relying on it |
-| 4- and 8-digit hex (`#0008`, `#ffffffbf`) | Rejected (observed), although Chrome 62+ supports them. Use `rgba()` to be safe |
+| 4- and 8-digit hex (`#0008`, `#ffffffbf`) | Rejected (observed), although Chrome 62+ supports them. Use `rgba()` to be safe. Also rejected on one DP101 with WebView 113, see [veswwe-dp101.md](veswwe-dp101.md#css-compatibility-issues-in-this-webview) |
 | `dvh`/`svh`/`lvh` units | Chrome 108+. Use `vh` or `100%`, since the frame has no browser bars |
 | Subgrid, `@starting-style`, `text-wrap: balance`, View Transitions, scroll-driven animations, anchor positioning, Popover API | Chrome 111+ |
 | Container queries (`@container`) | Chrome 105, so (expected) to work, but untested. Test before you depend on them |
@@ -101,9 +115,64 @@ does **not** add these functions; avoid them, or add a polyfill.
   Prefer JPEG/WebP. Avoid AVIF.
 - Video, WebGL scenes, big canvas animations, `backdrop-filter`/large blurs, long box-shadow
   animations, and dozens of simultaneous animations. The GPU is OpenGL ES 2.0 and the CPU is slow.
+- An animation that never ends. Serve a static SVG.
+  - On a Frameo 114K, one SMIL icon held the kiosk at about 1.8 of 4 cores, and the same
+    page with that icon static sat at about 0.05. The renderer thread and the GPU thread
+    split that cost. Seven animated icons cost the same as one
+    ([#143](https://github.com/wesbos/photo-frame-dashboard/issues/143)).
+  - On one PF1007L (firmware `20260410`, WebView 106, the `com.wesbos.homehq` kiosk, an
+    otherwise empty page) the same kind of sample read about 2.1 cores for one SMIL icon
+    and about 1.1 cores for one infinite CSS animation of `transform` and `opacity`.
+    The static page and a CSS animation that had already finished both sat at about 0.
+    SMIL time was spread across the renderer, the GPU thread, and the compositor. The CSS
+    loop stayed off the renderer and still kept the compositor busy. All 4 CPUs were online
+    during either loop. This unit had been down to CPU 0 while idle. Animated GIFs were
+    not measured. A clock text change once a minute, or an image swapped every few seconds,
+    is a separate cost.
 - Very large frameworks or bundles. Aim for a JS bundle in the low hundreds of KB.
-- Re-rendering the whole page every second. Update only what changes (the clock text, for
-  example).
+- Re-rendering the whole page every second. See [Keep routine updates small](#keep-routine-updates-small).
+
+## Keep routine updates small
+
+[Issue #156](https://github.com/wesbos/photo-frame-dashboard/issues/156) reports three useful
+JS changes on one PF1007L: cache `Intl.DateTimeFormat`, repaint only changed data, and update
+a minute-resolution clock once a minute. Its timing/CPU figures belong to that contributor's
+unit and workload. These are also useful implementation patterns when building your own site:
+
+- **Cache formatters for the current locale/time zone.** Recreate them when either changes,
+  rather than constructing one for every row or tick. A clock showing only hours/minutes
+  needs formatting on minute changes, time-zone changes and return from sleep. Date text
+  needs updating only when its displayed value changes. For example, with a fixed locale:
+
+  ```js
+  var clockZone, clockFormatter;
+  function updateClock(element, now, timezone) {
+    if (clockZone !== timezone) {
+      clockFormatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+      });
+      clockZone = timezone;
+    }
+    var text = clockFormatter.format(now);
+    if (element.textContent !== text) element.textContent = text;
+  }
+  ```
+
+- **Separate data updates from elapsed-time updates.** Keep forecast rows, icons and chart
+  curves in place until new data or a new local day requires rebuilding them. Move the
+  current-time marker and refresh stale-age labels independently. Replacing a container's
+  `innerHTML` recreates its children even when the output looks unchanged; avoid that work
+  on every tick.
+- **Choose an inactive-view policy deliberately.** A simple site can retain fetched data
+  and defer DOM updates while its view or the document is hidden, then render the latest
+  state on return. Keep fetch/cache/backoff independent of visual activity. The demo's
+  `js/app.js` deliberately prebuilds hidden views to improve navigation latency; removing
+  that behavior has a tradeoff, so measure before changing it. Stop unnecessary slideshow
+  timers when their view is inactive.
+- **Keep correctness deadlines independent.** Reducing clock/chart painting does not mean
+  slowing authentication expiry, schedule boundaries or inactivity checks. Recompute from
+  the current wall clock on resume and time correction. Use elapsed/monotonic time where
+  appropriate for inactivity; do not assume that counting timer callbacks measures sleep.
 
 ## Network and HTTPS
 

@@ -101,7 +101,7 @@ Restore would need Rockchip loader mode and `rkdeveloptool`; neither has been tr
 
 ## Guesses (unverified)
 
-- Whether `/system` can be remounted read-write the way the BIUFRAME steps assume, given `veritymode=enforcing`.
+- Whether `/system` can be remounted read-write the way the BIUFRAME steps assume, given `veritymode=enforcing`. (Answered on a [third unit](#third-unit-dpf-frame-156-firmware-v2026051219-2026-10-15): yes, `/system` is not on a dm-verity device there.)
 - Whether Frameo re-launches itself over a third-party HOME or kiosk app.
 - Whether Frameo's cloud or the OTA app can replace system files on their own.
 
@@ -197,6 +197,11 @@ was disabled, its private data, local media directory and installed APK were add
 archived and the tar was read back successfully. Dumps, APKs and whole-disk hashes stayed private.
 Firmware restoration and physical loader entry remain unverified.
 
+**Don't share a pre-userdata dump.** Sectors before `userdata` still hold per-unit data: chip and
+UID records in all five idbloader copies, Rockchip vendor storage in unpartitioned space, and
+Frameo licence and UUID files in `vendor` (also in its ext4 journal). Removing them may stop Frameo
+from activating. Restoring one unit's dump to another frame has not been tested (#209, #211).
+
 ### Kiosk startup and dashboard aspect ratio
 
 A separately implemented WebView kiosk with a HOME intent filter loaded the published demo
@@ -219,3 +224,187 @@ is only reported here; this contribution does not change the dashboard implement
 Motion/PIR support, firmware restoration, other units and other firmware versions were not
 tested in this report.
 
+## Third unit: "DPF Frame 156", firmware v2026051219 (2026-10-15)
+
+> **Record, not a procedure.** This unit had no full eMMC backup, so the `/system` WebView swap below
+> does not meet README rule 2. The root script that did the swap is not in this repo, and the undo
+> below was not run. Read it as what one owner did, not as steps to follow.
+
+A third unit, bought on Amazon.ca as the Pastigio 15.6" listing. Frameo **Settings -> About** names it
+`DPF Frame 156` rather than `FRAME156`, but the ADB properties match the earlier units' model on newer
+firmware. Host: macOS through a USB hub.
+
+| Observation | Value |
+| --- | --- |
+| `ro.product.model` / `ro.product.device` | `FRAME156` / `FRAME156` |
+| Firmware | `FrameO.DP105F.v2026051219` (earlier units: `v2026010414`) |
+| Fingerprint | `rockchip/rk3326_32bit/rk3326_32bit:8.1.0/OC/192521:user/release-keys` |
+| ABI | `armeabi-v7a,armeabi` |
+| Display | 1920x1080, 170 dpi |
+| Frameo | `net.frameo.frame` v1.32.16 (updated), system copy v1.30.19 |
+| WebView as shipped | `com.android.webview` 106.0.5249.126 at `/system/app/webview/webview.apk`, vendor-signed |
+| `/system` mount | `/dev/block/mmcblk2p11` ext4 `ro`, **no `/dev/block/dm-*` devices**, although `ro.boot.veritymode=enforcing` |
+| Root | Shipped `su -c` returns root without a prompt |
+
+### ADB
+
+With computer photo transfer off and **Settings -> About -> Beta -> ADB access** on, the host first
+showed `unauthorized`. Turning ADB access off and on again with the cable connected, then accepting
+Frameo's ADB warning, changed it to `device`. No key injection or loader was needed. `adb tcpip 5555`
+drops the USB connection for a few seconds, so ADB commands run straight after it fail with
+`no devices/emulators found`.
+
+### Kiosk as Home app
+
+`dashboard/kiosk` (`com.wesbos.homehq`) installed and `pm grant ... WRITE_SECURE_SETTINGS` succeeded.
+The owner's local build was also made device owner with `dpm set-device-owner`. The repo's kiosk has
+no device admin receiver, so that step doesn't apply to it. Don't make an app device owner: it
+can't be removed without the app's help or a factory reset. The `.Home` alias ships disabled, so `cmd package set-home-activity com.wesbos.homehq/.Home`
+fails with `cannot be home on user 0` until the app has enabled it. This order works:
+
+```bash
+adb shell am start -n com.wesbos.homehq/.MainActivity --ez home true
+adb shell cmd package set-home-activity com.wesbos.homehq/.Home
+```
+
+The dashboard's fixed 1280x800 stage again showed 96-pixel side bars at 1920x1080, as on the second unit.
+
+### WebView 138 in place of the vendor WebView 106
+
+`adb install -r` of the LineageOS `com.android.webview` 138.0.7204.63 (armeabi-v7a, minSdk 26) failed with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE` (signatures do not match), so the vendor WebView cannot be updated as
+an app. 138 is the newest build for Android 8.1: LineageOS 139 requires minSdk 29.
+
+| File | Source | SHA-256 |
+| --- | --- | --- |
+| `webview.apk` 138.0.7204.63 ARM | LineageOS [`android_external_chromium-webview_prebuilt_arm` at `b2639126d02b`](https://github.com/LineageOS/android_external_chromium-webview_prebuilt_arm/commit/b2639126d02b401ae8a8a7f3ca302633713a12e6), Git LFS object on LineageOS Gerrit | `b7268786318f404bdad53eaaec889619ff30100b935541a9e393e32efed3cf11` |
+| `lib/arm/libwebviewchromium.so` | extracted from that APK (`lib/armeabi-v7a/`) | `d217fc3847fad5cecc1f37ffa8461b95fc2bb32586f63f01285381239c11b03d` |
+| `lib/arm/libcrashpad_handler_trampoline.so` | extracted from that APK (`lib/armeabi-v7a/`) | `e16d7cd6d1669d6da68997099425501f8bb6d6f0ae3bb6c8dbbb0bc8e0f4441d` |
+
+GitHub serves only the 133-byte LFS pointer for this file (its `oid` is the SHA-256 above). The
+object downloads from LineageOS's Gerrit LFS endpoint (tested 2026-10-15):
+
+```bash
+href=$(curl -s -X POST -H "Accept: application/vnd.git-lfs+json" -H "Content-Type: application/vnd.git-lfs+json" \
+  -d '{"operation":"download","transfers":["basic"],"objects":[{"oid":"b7268786318f404bdad53eaaec889619ff30100b935541a9e393e32efed3cf11","size":90257078}]}' \
+  https://review.lineageos.org/LineageOS/android_external_chromium-webview_prebuilt_arm/info/lfs/objects/batch \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["objects"][0]["actions"]["download"]["href"])')
+curl -sfL "$href" -o webview-138.0.7204.63-arm.apk   # signed link, valid for 60 seconds
+echo "b7268786318f404bdad53eaaec889619ff30100b935541a9e393e32efed3cf11  webview-138.0.7204.63-arm.apk" \
+  | shasum -a 256 -c - &&
+unzip -j webview-138.0.7204.63-arm.apk 'lib/armeabi-v7a/*' -d lib-arm && shasum -a 256 lib-arm/*.so
+```
+
+Because `/system` on this unit is a plain ext4 mount with no dm-verity device, the whole
+`/system/app/webview` tree was replaced through root, following the
+[PF1007L procedure](allwinner-a33-pf1007l.md#6-upgrade-webview-before-using-the-kiosk):
+
+1. Pulled the stock tree to the host (`adb pull /system/app/webview`, 3 files, about 211 MB). Its
+   hashes were not recorded, so there is nothing to compare the stock tree against before a write.
+2. Extracted `lib/armeabi-v7a/libwebviewchromium.so` and `libcrashpad_handler_trampoline.so` from the APK
+   on the host and pushed `webview.apk`, `lib/arm/*.so` and their MD5 list to `/data/local/tmp`.
+3. A root script checked the staged MD5s and refused existing staging or rollback paths. It checked
+   free space (about 700 MB free on `/system`), ran `mount -o remount,rw /system`, built
+   `/system/homehq-new-webview` (root:root, 0755 directories, 0644 files, `u:object_r:system_file:s0`)
+   and re-checked the MD5s. It then moved the stock tree to `/system/homehq-stock-webview`, moved the new
+   tree to `/system/app/webview`, checked the MD5s again, ran `sync` and remounted `/system` read-only.
+4. After `adb reboot`: `dumpsys webviewupdate` reported `com.android.webview, 138.0.7204.63`,
+   `codePath=/system/app/webview`, and logcat had no WebView `dlopen` errors. The device booted normally,
+   and the kiosk dashboard rendered on 138 with the frame's CA store.
+
+Undo (described, never run, and not guarded: the stock tree's hashes were not recorded): remount
+`/system` read-write, move `/system/app/webview` aside, move `/system/homehq-stock-webview`
+back to `/system/app/webview`, remount read-only and reboot. Repeated `ffmExtractor ... libffmpeg_utils.so not found`
+lines in logcat come from the media server, not WebView.
+
+### Disabling Frameo and the updater
+
+After checking that the kiosk's two-finger hold -> **Android settings** reaches Settings -> Apps,
+`pm disable-user --user 0` for `com.muxintu.app.mxota` and `net.frameo.frame` printed
+`new state: disabled-user`. However, an `adb reboot` run straight after it brought both back:
+`enabled=0` and both processes running. Nothing in logcat re-enabled them. Running the same two commands again, waiting about 30 seconds and checking
+`/data/system/users/0/package-restrictions.xml` (both `enabled="3"`) before rebooting made the
+change survive the reboot, with neither app running afterwards. This is probably Android's
+delayed write of package restrictions, not anything the vendor does. Wait, or check the file, before
+rebooting. The system copy's `User 0` line in `dumpsys package` stays at `enabled=0`. That is normal;
+the first `User 0` line is the one that counts.
+
+Not tested on this unit: whether a Frameo or `com.muxintu.app.mxota` OTA (both now disabled) would restore the vendor
+WebView, a full eMMC backup, and loader mode.
+
+## Fourth unit: firmware v2026051219, tested on macOS (2026-10-18)
+
+Another `FRAME156` on the same firmware as the unit in
+[the third unit](#third-unit-dpf-frame-156-firmware-v2026051219-2026-10-15). Host: Intel Mac, USB through a
+Thunderbolt dock. The frame stayed offline until after the backup and the OTA app was disabled.
+
+| Observation | Value |
+| --- | --- |
+| Model / firmware | `FRAME156`, `FrameO.DP105F.v2026051219` |
+| Fingerprint | `rockchip/rk3326_32bit/rk3326_32bit:8.1.0/OC/192521:user/release-keys` |
+| USB (ADB) | `2218:0006`, vendor string `rockchip`, product `FRAME156`, interface class `ff/42/01` |
+| Frameo | `net.frameo.frame` v1.30.19 at `/system/priv-app/DP_Frameo` (not updated; kept offline) |
+| Launcher3 | Already disabled when received |
+| WebView | `com.android.webview` 106.0.5249.126 |
+| Root / SELinux | Shipped `su -c id` gives uid 0 without a prompt; `Permissive` |
+| eMMC | 31,268,536,320 bytes (61,071,360 sectors) |
+| Partitions | p1-p15 identical to the [table above](#partition-table-emmc-mmcblk2-512-byte-sectors); `userdata` is 55,458,752 sectors (first unit: 55,450,560) |
+
+The ADB USB vendor ID differs between units: `18D1` (first unit), `2211` (second unit), `2218`
+(this one). Match on product `FRAME156` and the ADB interface class, not on the vendor ID.
+
+### ADB authorization
+
+With ADB Access on and computer photo transfer off, the host showed `unauthorized`. **No prompt or
+Frameo warning appeared on the screen** at any point. It stayed `unauthorized` through a server
+restart and three minutes of polling. After ADB Access was turned off and on again, the state did
+not change by itself within a minute, but `adb kill-server` followed by `adb start-server` turned it
+into `device` within about 4 seconds. No key injection or loader was needed.
+
+The host's old SDK `adb` 1.0.36 also saw the frame as `unauthorized` but logged
+`Unable to create an interface plug-in (e00002be)`. Current platform-tools (37.0.1, ADB 1.0.41)
+was used for everything else.
+
+### Backup of everything before userdata (verified)
+
+Sectors 0-5,612,544 (2,873,622,528 bytes) were captured with the base64 method from
+[Backup](#backup-2026-10-09-verified):
+
+```sh
+adb exec-out "su -c 'dd if=/dev/block/mmcblk2 bs=524288 count=5481 2>/dev/null | gzip -1 | base64'" \
+  | tr -d '\r' | base64 -D > emmc-0-5612544.img.gz   # macOS; use base64 -d on Linux
+```
+
+A 1 MiB probe of `uboot` first matched its device-side SHA-256. The full capture took about 10
+minutes (568 MB gzipped). The gzip readback was exactly 2,873,622,528 bytes, and its SHA-256 matched
+a separate device-side read of the same range. No 1 MiB block was entirely `0xCC`. Per-partition
+re-reads on the device matched the backup for `uboot` through `frp`, except `oem`, which differed in
+exactly one byte at partition offset `0x1702b` (`0x00` in the backup, `0x02` later), inside the JBD
+journal superblock (magic `c03b3998`). This is the same byte as on both earlier units. Here it
+changed within minutes, between two reads, while `/oem` was mounted read-only. `userdata`,
+`mmcblk2boot0/1` and `rpmb` were not captured. Restore was not tested.
+
+### Kiosk, Frameo and reboot
+
+The kiosk was installed and made Home with the `--ez home true` and `set-home-activity` order from
+the [kiosk README](../dashboard/kiosk/README.md#start-at-boot). Before Frameo was disabled, ADB was
+confirmed to depend on Android settings rather than Frameo (`settings get global adb_enabled` = `1`,
+`persist.sys.usb.config` = `adb`), and the kiosk's two-finger hold -> **Android settings** was
+checked on the panel.
+
+`pm disable-user --user 0` was run for `com.muxintu.app.mxota` (well before the reboot)
+and `net.frameo.frame` (shortly before it; neither delay was measured). After `adb reboot` the frame
+booted into the kiosk, both apps stayed disabled and not running, and ADB was back in about 18
+seconds **without replugging USB**. The kiosk WebView kept its login across the reboot. Compare
+[the third unit](#third-unit-dpf-frame-156-firmware-v2026051219-2026-10-15), where an immediate reboot
+undid `disable-user`.
+
+### Networking
+
+Onboard Wi-Fi joined the network and reconnected after the reboot. Network ADB (port 5555) was
+not listening. **mDNS `.local` names do not resolve** on this Android 8.1 build
+(`ping homeassistant.local` gives `unknown host`), so a kiosk URL like
+`http://homeassistant.local:8123/...` fails. Use an IP address or a regular DNS name. A Home
+Assistant dashboard over plain `http://` loaded in the kiosk on WebView 106.
+
+Motion/PIR, loader mode, firmware restore and a WebView upgrade were not tested on this unit.
