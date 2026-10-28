@@ -4,6 +4,7 @@
   var D = window.DATA;
 
   function src(p, big) {
+    if (D.live) return p.url;
     var w = p.o === 'p' ? 800 : 1600, h = p.o === 'p' ? 1200 : 1000;
     if (!big) { w = Math.round(w / 2); h = Math.round(h / 2); }
     return App.img(p.seed, w, h);
@@ -12,6 +13,8 @@
 
   function parseDate(p) { var a = p.date.split('-'); return new Date(+a[0], +a[1] - 1, +a[2]); }
   App.photoMeta = function (p) {
+    if (D.live && p.dateKind === 'unknown') return { date: 'Family album', monthYear: 'Family album',
+      kicker: 'From OneDrive', onThisDay: false, place: '', from: D.family };
     var d = parseDate(p), now = App.now();
     var years = now.getFullYear() - d.getFullYear();
     var onThisDay = d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
@@ -71,6 +74,14 @@
     this.count = 0;
     this.timer = null;
     this.current = null;
+    if (D.live) {
+      var self = this;
+      App.on('photos', function () {
+        self.queue = []; self.history = []; self.current = null;
+        self.el.innerHTML = '';
+        if (self.timer) self.next();
+      });
+    }
   };
   var S = App.Slideshow.prototype;
 
@@ -100,13 +111,18 @@
     }
     var ps = [first];
     if (layout === 'pair') {
-      if (first.o !== 'p') { first = sibling(function (x) { return x.o === 'p'; }); ps = [first]; }
+      if (first.o !== 'p') {
+        var portrait = sibling(function (x) { return x.o === 'p'; });
+        if (!portrait) return { layout: 'cover', photos: ps };
+        first = portrait; ps = [first];
+      }
       ps.push(sibling(function (x) { return x !== first && x.o === 'p' && x.tag === first.tag; }) || sibling(function (x) { return x !== first && x.o === 'p'; }));
     }
     if (layout === 'collage') {
       ps.push(sibling(function (x) { return x !== first; }));
       ps.push(sibling(function (x) { return ps.indexOf(x) < 0; }));
     }
+    if (ps.some(function (p) { return !p; })) return { layout: 'cover', photos: [first] };
     return { layout: layout, photos: ps };
   };
 
@@ -119,7 +135,10 @@
     node.style.opacity = '0';
     // Fallback look if images can't load (offline)
     Array.prototype.forEach.call(node.querySelectorAll('img'), function (im) {
-      im.addEventListener('error', function () { im.classList.add('is-broken'); });
+      im.addEventListener('error', function () {
+        im.classList.add('is-broken');
+        if (D.live) App.photoError();
+      });
     });
     var old = Array.prototype.slice.call(this.el.children);
     this.el.appendChild(node);
@@ -138,8 +157,12 @@
 
   S.next = function () {
     var s = this.pick();
-    if (!s) return;
+    if (!s) {
+      if (D.live) this.el.innerHTML = '<div class="live-empty">No photos available. Check the NAS album status.</div>';
+      return;
+    }
     if (this.current) this.history.push(this.current);
+    if (D.live && this.history.length > 30) this.history.shift();
     this.render(s);
     this.restart();
   };

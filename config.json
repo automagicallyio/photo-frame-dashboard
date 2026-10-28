@@ -1,0 +1,21 @@
+{
+  "allowed_hosts": ["synology:8088", "10.0.1.183:8088"],
+  "timezone": "America/Toronto",
+  "weather": { "name": "Oakville, Ontario", "latitude": 43.45, "longitude": -79.68 },
+  "photo_directory": "/volume1/homes/max/onedrive/oyerma_gmail_com/Pictures",
+  "photo_index_interval_hours": 24,
+  "people": [
+    { "id": "maksut", "name": "Maksut", "color": "#4778E8" },
+    { "id": "olga", "name": "Olga", "color": "#D6A72C" },
+    { "id": "vera", "name": "Vera", "color": "#936548" },
+    { "id": "lisa", "name": "Lisa", "color": "#269B62" },
+    { "id": "timur", "name": "Timur", "color": "#EF5350" }
+  ],
+  "calendars": [
+    { "name": "Maksut calendar", "url": "https://calendar.google.com/calendar/ical/yermax%40gmail.com/private-6fe861ff751e65f3de0da800068723d2/basic.ics", "people": ["maksut"] },
+    { "name": "Olga calendar", "url": "https://calendar.google.com/calendar/ical/oyerma%40gmail.com/private-bfd9d6ce8b102b38830811d9475ec456/basic.ics", "people": ["olga"] },
+    { "name": "Vera calendar", "url": "https://calendar.google.com/calendar/ical/yermakhaver%40gmail.com/private-7c98d8dedbc8851e26bf0d76eeb7958a/basic.ics", "people": ["vera"] },
+    { "name": "Lisa calendar", "url": "https://calendar.google.com/calendar/ical/yermakhalis%40gmail.com/private-14c95d191ce667eaa4a82b08b4fec17e/basic.ics", "people": ["lisa"] },
+    { "name": "Timur calendar", "url": "https://calendar.google.com/calendar/ical/timuryermakhanov%40gmail.com/private-efb5ef8e1922ceb5e1574f5627942cf4/basic.ics", "people": ["timur"] }
+  ]
+}

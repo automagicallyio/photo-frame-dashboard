@@ -82,7 +82,7 @@
   App.avatar = function (p, size, cls) {
     if (typeof p === 'string') p = App.person(p);
     size = size || 48;
-    return '<span class="avatar ' + (cls || '') + '" style="' + App.pstyle(p) + ';width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.46) + 'px">' + (p.id === 'family' ? '★' : p.name[0]) + '</span>';
+    return '<span class="avatar ' + (cls || '') + '" style="' + App.pstyle(p) + ';width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.46) + 'px">' + (p.id === 'family' ? '★' : App.esc(p.name[0])) + '</span>';
   };
   App.dots = function (ids, size) {
     return '<span class="dots">' + ids.map(function (id) { return '<i style="' + App.pstyle(id) + (size ? ';width:' + size + 'px;height:' + size + 'px' : '') + '"></i>'; }).join('') + '</span>';
@@ -129,6 +129,12 @@
     return D.routines[2];
   };
   App.weatherNow = function () {
+    if (D.live) {
+      var hour = App.hourly(1)[0];
+      if (!hour) return null;
+      return { temp: hour.t, cond: hour.c, label: hour.conditionLabel, hi: D.weather.hi, lo: D.weather.lo,
+        summary: D.weather.name, advice: 'Forecast by Open-Meteo' };
+    }
     var W = D.weather, h = App.now().getHours();
     var rainAt = -1;
     for (var i = h; i < 24; i++) if (W.p[i] >= 50) { rainAt = i; break; }
@@ -149,6 +155,14 @@
     return { temp: W.t[h], cond: W.c[h], label: labels[W.c[h]], hi: W.hi, lo: W.lo, summary: summary, advice: advice, hour: h };
   };
   App.hourly = function (count) {
+    if (D.live) {
+      if (!D.weather) return [];
+      var now = +App.now();
+      return D.weather.hours.filter(function (x) { return x.time + 3600000 > now; }).slice(0, count).map(function (x, i) {
+        var h = new Date(x.time).getHours();
+        return Object.assign({}, x, { h: h, conditionLabel: x.label, label: i === 0 ? 'Now' : ((h % 12 || 12) + (h >= 12 ? 'p' : 'a')) });
+      });
+    }
     var W = D.weather, h = App.now().getHours(), out = [];
     for (var i = 0; i < count; i++) {
       var x = (h + i) % 24;
@@ -158,7 +172,9 @@
   };
 
   // ------------------------------------------------------------ router
-  App.register = function (name, view) { App.views[name] = view; };
+  App.register = function (name, view) {
+    if (!D.live || ['home', 'calendar', 'tasks', 'shopping', 'photos'].indexOf(name) !== -1) App.views[name] = view;
+  };
   // Views are built once and kept laid out (hidden with content-visibility), so switching tabs
   // only has to paint. A view is rebuilt when its data changed ('data'/'time' events) or, for
   // time-sensitive views (minutely: true), when the minute has rolled over since it was built.
@@ -333,7 +349,13 @@
 
   // ------------------------------------------------------------ boot
   App.start = function () {
-    App.setTime(15, 18); // demo default: a busy weekday afternoon
+    App.setTime(D.live ? null : 15, 18);
+    if (D.live) {
+      $('#stage').dataset.live = 'true';
+      $('#stage').style.setProperty('--people', D.people.length);
+      $('#stage').style.setProperty('--chore-lanes', D.people.length + 1);
+      window.HOMEHQ_CONNECT(App);
+    }
     fit();
     window.addEventListener('resize', fit);
     // Switch tabs the instant a finger lands (pointerdown), not on release. Keyboard "clicks"
@@ -353,7 +375,7 @@
     setInterval(tick, 1000);
     App.emit('ready');
     refreshStale(1500);
-    setTimeout(function () { App.toast('Tip: press and hold the <b>clock</b> in the sidebar for demo controls', { ms: 6000, icon: 'bolt' }); }, 1200);
+    if (!D.live) setTimeout(function () { App.toast('Tip: press and hold the <b>clock</b> in the sidebar for demo controls', { ms: 6000, icon: 'bolt' }); }, 1200);
   };
   document.addEventListener('DOMContentLoaded', function () { App.start(); });
 })();
